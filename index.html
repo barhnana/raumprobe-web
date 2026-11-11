@@ -775,8 +775,12 @@ function fitView() {
   V.ox = (W - (b[2] - b[0]) * V.s) / 2 - b[0] * V.s; V.oy = (H - (b[3] - b[1]) * V.s) / 2 - b[1] * V.s + 12;
 }
 function itemContains(it, w) { const r = -it.rot * Math.PI / 180, dx = w[0] - it.x, dy = w[1] - it.y, lx = dx * Math.cos(r) - dy * Math.sin(r), ly = dx * Math.sin(r) + dy * Math.cos(r); return Math.abs(lx) <= it.w / 200 && Math.abs(ly) <= it.d / 200; }
+/* Anfasser des ausgewählten Möbels: Mitte jeder Seite, zum Ziehen von Breite und Tiefe. */
+function itemHandles(it) { const r = it.rot * Math.PI / 180, c = Math.cos(r), sn = Math.sin(r), hw = it.w / 200, hd = it.d / 200; return [[it.x + hw * c, it.y + hw * sn, 'r'], [it.x - hw * c, it.y - hw * sn, 'l'], [it.x - hd * sn, it.y + hd * c, 'f'], [it.x + hd * sn, it.y - hd * c, 'b']]; }
 function hit2D(m, touch) {
   const w = toW(m), px = (touch ? 2.2 : 1) / V.s;
+  const si = sel && sel.type === 'item' ? S.items.find(i => i.id === sel.id) : null;
+  if (si) for (const hd of itemHandles(si)) if (Math.hypot(w[0] - hd[0], w[1] - hd[1]) < Math.min(9 * px, (hd[2] === 'r' || hd[2] === 'l' ? si.w : si.d) / 200 * 0.45)) return { type: 'resize', id: si.id, side: hd[2] };
   for (const r of S.rooms) for (let i = 0; i < r.pts.length; i++) if (Math.hypot(w[0] - r.pts[i][0], w[1] - r.pts[i][1]) < 10 * px) return { type: 'vertex', room: r.id, i };
   for (const o of S.openings) if (Math.hypot(w[0] - o.x, w[1] - o.y) < Math.max(11 * px, 0.2)) return { type: 'opening', id: o.id };
   for (const q of S.walls) for (const k of ['a', 'b']) if (Math.hypot(w[0] - q[k][0], w[1] - q[k][1]) < 10 * px) return { type: 'wall', id: q.id, end: k };
@@ -929,6 +933,8 @@ function draw2D() {
     x.fillStyle = C.ink2; x.font = '500 11px "IBM Plex Mono", monospace'; x.fillText(de(a, 2) + ' m²', X(c[0]), Y(c[1]) + 8);
   }
   if (s >= 34) { x.fillStyle = C.ink2; x.font = '500 10.5px "IBM Plex Mono", monospace'; for (const e of edges) { if (e.len * s < 46) continue; let ang = Math.atan2(e.b[1] - e.a[1], e.b[0] - e.a[0]); if (ang > Math.PI / 2 || ang < -Math.PI / 2) ang += Math.PI; const mx = X((e.a[0] + e.b[0]) / 2) - e.n[0] * (wallW + 9), my = Y((e.a[1] + e.b[1]) / 2) - e.n[1] * (wallW + 9); x.save(); x.translate(mx, my); x.rotate(ang); x.fillText(de(e.len, 2), 0, 0); x.restore(); } }
+  { const si = tool === 'select' && sel && sel.type === 'item' ? S.items.find(i => i.id === sel.id) : null;
+    if (si) { for (const hd of itemHandles(si)) { x.fillStyle = C.accent; x.strokeStyle = C.ink; x.lineWidth = 1.5; x.beginPath(); x.rect(X(hd[0]) - 5, Y(hd[1]) - 5, 10, 10); x.fill(); x.stroke(); } if (gesture && gesture.type === 'resize') label(x, 'B ' + deNum(si.w) + ' × T ' + deNum(si.d) + ' cm', X(si.x), Y(si.y)); } }
   if (tool === 'select') for (const r of S.rooms) r.pts.forEach((p, i) => { const on = sel && sel.type === 'vertex' && sel.room === r.id && sel.i === i; x.fillStyle = on ? C.accent : C.raised; x.strokeStyle = C.ink; x.lineWidth = 1.5; x.fillRect(X(p[0]) - 4.5, Y(p[1]) - 4.5, 9, 9); x.strokeRect(X(p[0]) - 4.5, Y(p[1]) - 4.5, 9, 9); });
   if (drawPts) {
     x.strokeStyle = C.accent; x.lineWidth = 3; x.beginPath(); drawPts.forEach((p, i) => i ? x.lineTo(X(p[0]), Y(p[1])) : x.moveTo(X(p[0]), Y(p[1]))); x.stroke();
@@ -966,6 +972,7 @@ c2d.addEventListener('pointerdown', e => {
   const touch = e.pointerType === 'touch', h = hit2D(m, touch);
   if (!h) return;
   /* Touch: Möbel und Wände erst antippen, dann ziehen. Ein Finger auf einem nicht ausgewählten Objekt bewegt die Ansicht. */
+  if (h.type === 'resize') { const it = cur(); beginChange(); gesture.changing = true; gesture.type = 'resize'; gesture.side = h.side; gesture.o = { w: it.w, d: it.d, x: it.x, y: it.y }; return; }
   if (touch && (h.type === 'item' || (h.type === 'wall' && !h.end)) && !(sel && sel.type === h.type && sel.id === h.id)) { gesture.tap = h; return; }
   sel = h.type === 'vertex' ? { type: 'vertex', room: h.room, i: h.i } : { type: h.type, id: h.id };
   if (h.type === 'room') { showTab('raum'); refresh(); return; }
@@ -995,6 +1002,16 @@ c2d.addEventListener('pointermove', e => {
     for (const l of gesture.links) { l[0].pts[l[1]][0] = t[0]; l[0].pts[l[1]][1] = t[1]; }
     for (const q of gesture.ops) { const r = S.rooms.find(z => z.id === q.room); if (!r) continue; const a = r.pts[q.i], b = r.pts[(q.i + 1) % r.pts.length]; q.o.x = a[0] + (b[0] - a[0]) * q.t; q.o.y = a[1] + (b[1] - a[1]) * q.t; }
   } else if (gesture.type === 'opening') { const o = S.openings.find(z => z.id === sel.id), at = attach({ x: w[0], y: w[1] }, edgesOf(S), 1); if (o && at) { o.x = at.x; o.y = at.y; } }
+  else if (gesture.type === 'resize') {
+    const it = cur(), o = gesture.o;
+    if (it) {
+      const r = it.rot * Math.PI / 180, c = Math.cos(r), sn = Math.sin(r), ax = w[0] - o.x, ay = w[1] - o.y, lx = ax * c + ay * sn, ly = -ax * sn + ay * c;
+      const sd = gesture.side, hor = sd === 'r' || sd === 'l', half = (hor ? o.w : o.d) / 200, sgn = sd === 'r' || sd === 'f' ? 1 : -1;
+      const size = clamp(Math.round((sgn * (hor ? lx : ly) + half) * 100), 5, 1000), mid = sgn * (size / 100 - 2 * half) / 2;
+      if (hor) { it.w = size; it.x = o.x + mid * c; it.y = o.y + mid * sn; } else { it.d = size; it.x = o.x - mid * sn; it.y = o.y + mid * c; }
+      syncForm();
+    }
+  }
   else if (gesture.type === 'wall') {
     const q = S.walls.find(z => z.id === sel.id);
     if (q && gesture.end) { const p = snapWall(w, q[gesture.end], gesture.end === 'a' ? q.b : q.a); q[gesture.end][0] = p[0]; q[gesture.end][1] = p[1]; }
@@ -1415,6 +1432,10 @@ function readForm(e) {
   if (it) change(() => { apply(it); if (!it.name) it.name = CATS[it.cat][0]; }); else { apply(draft); syncForm(); }
 }
 function dropPoint() {
+  /* Neue Möbel landen in der Mitte des sichtbaren Ausschnitts. */
+  const k0 = S.items.length % 6 * 0.12, sw = stage.clientWidth, sh = stage.clientHeight;
+  if (view3 && T.ok) { const c = T.cam; if (c.mode === 'walk') return [c.ex + Math.sin(c.yaw) * 2 + k0, c.ez - Math.cos(c.yaw) * 2 + k0]; const p = planeHit(sw / 2, sh / 2, 0); if (p && Math.hypot(p.x - c.tx, p.z - c.tz) < 200) return [p.x + k0, p.z + k0]; }
+  else if (!view3 && sw && sh) { const w = toW([sw / 2, sh / 2]); return [w[0] + k0, w[1] + k0]; }
   const r = (sel && sel.type === 'room' && S.rooms.find(q => q.id === sel.id)) || S.rooms[0], k = S.items.length % 6;
   if (r) { const c = centroid(r.pts); return [c[0] + k * 0.12, c[1] + k * 0.12]; }
   const b = bbox(false); return [(b[0] + b[2]) / 2 + k * 0.12, (b[1] + b[3]) / 2 + k * 0.12];
