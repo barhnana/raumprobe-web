@@ -101,6 +101,13 @@ button,input,select,textarea{font:inherit;color:inherit}
 .field input,.field select,.field textarea,.inp{font:400 14px var(--f-body);letter-spacing:0;text-transform:none;color:var(--ink);background:var(--raised);border:1px solid var(--line);border-radius:var(--r);padding:6px 8px;min-width:0;width:100%}
 .field input[type="color"],.inp[type="color"]{padding:2px;height:33px}
 .num{font-family:var(--f-mono)!important;font-variant-numeric:tabular-nums}
+.stp{display:flex;align-items:stretch;min-width:0}
+.stp input{flex:1 1 0;min-width:0;border-radius:0;text-align:center;padding-inline:2px}
+.stpb{flex:none;width:26px;padding:0;border:1px solid var(--line);background:var(--raised);color:var(--ink);font:600 16px/1 var(--f-body);cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:manipulation}
+.stpb:first-child{border-radius:var(--r) 0 0 var(--r);margin-right:-1px}
+.stpb:last-child{border-radius:0 var(--r) var(--r) 0;margin-left:-1px}
+.stpb:hover{border-color:var(--ink-2);position:relative}
+.stpb:active{background:var(--accent);color:var(--accent-ink)}
 .grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
 .grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .inline{display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:13px}
@@ -1384,7 +1391,7 @@ function syncForm() {
   $('#pImgAI').hidden = !(!it && draft.blob && cap.sample && cap.sampleImages);
   const l = $('#fLink'); l.hidden = !(it && it.url); if (it && it.url) l.href = it.url;
 }
-function readForm(e) {
+function readForm(e, live) {
   if (!loaded) return;
   const it = cur(), id = e && e.target ? e.target.id : '';
   const apply = t => {
@@ -1399,7 +1406,7 @@ function readForm(e) {
     t.color = hex($('#fColor').value, t.color); t.elev = num($('#fElev').value, t.elev, 0, 500); t.rot = ((num($('#fRot').value, t.rot, -3600, 3600) % 360) + 360) % 360;
     if (id === 'fOW') t.ow = num($('#fOW').value, t.ow, 20, 600);    if (!it && /^f(W|D|H|Color)$/.test(id)) t.touched = true;
   };
-  if (it) change(() => { apply(it); if (!it.name) it.name = CATS[it.cat][0]; }); else { apply(draft); syncForm(); }
+  if (it && live) { apply(it); syncForm(); } else if (it) change(() => { apply(it); if (!it.name) it.name = CATS[it.cat][0]; }); else { apply(draft); syncForm(); }
 }
 function dropPoint() {
   /* Neue Möbel landen in der Mitte des sichtbaren Ausschnitts. */
@@ -1722,6 +1729,23 @@ function decorate(sel, name) {
     '#undoBtn': 'undo', '#shareBtn': 'link', '#clearItems': 'trash', '#expBtn': 'exp', 'label[for="impFile"]': 'imp', '#view2d': 'plan', '#view3d': 'cube',
     '#rotL': 'rotL', '#rotR': 'rotR', '#rot90': 'rotR', '#fDup': 'dup', '#fDel': 'trash', '#oDel': 'trash', '#planRemove': 'trash' };
   for (const k in IC) decorate(k, IC[k]);
+  /* Maße mit der Maus: Minus- und Plus-Taste an jedem Maßfeld. Ein Klick ändert 1 cm, gedrückt halten läuft weiter und wird schneller. */
+  for (const id of ['#fW', '#fD', '#fH', '#fOW', '#fOD', '#fElev']) {
+    const inp = $(id), box = el('span', 'stp'), min = id === '#fElev' ? 0 : 1, what = inp.parentNode.firstChild.textContent.trim();
+    const mk = (txt, dir) => {
+      const b = el('button', 'stpb', txt); b.type = 'button'; b.setAttribute('aria-label', what + (dir > 0 ? ' vergrößern' : ' verkleinern'));
+      let tm = 0, n = 0, begun = false;
+      const bump = () => { n++; inp.value = deNum(clamp(Math.round(num(inp.value, min, 0, 1000)) + dir * (n > 14 ? 5 : 1), min, 1000)); };
+      const step = () => { bump(); readForm({ target: inp }, true); if (cur()) { if (view3) rebuild3D(); else draw2D(); } };
+      const stop = () => { clearTimeout(tm); tm = 0; n = 0; if (begun) { begun = false; endChange(); } };
+      b.addEventListener('pointerdown', e => { if (!loaded || e.button > 0) return; e.preventDefault(); begun = !!cur(); if (begun) beginChange(); step(); const again = () => { step(); tm = setTimeout(again, 70); }; tm = setTimeout(again, 420); });
+      for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) b.addEventListener(ev, stop);
+      b.addEventListener('contextmenu', e => e.preventDefault());
+      b.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (loaded) { bump(); n = 0; readForm({ target: inp }); } } });
+      return b;
+    };
+    inp.parentNode.insertBefore(box, inp); box.append(mk('−', -1), inp, mk('+', 1));
+  }
   const sel$ = $('#fCat'); for (const k in CATS) { const o = el('option', '', CATS[k][0]); o.value = k; sel$.appendChild(o); }
   $('#view2d').addEventListener('click', () => setView(false)); $('#view3d').addEventListener('click', () => setView(true));
   $('#undoBtn').addEventListener('click', undoLast);
