@@ -368,7 +368,7 @@ a.plink{font-size:13px;color:var(--blue);overflow-wrap:anywhere}
             <a class="plink" id="fLink" target="_blank" rel="noopener noreferrer" hidden>Produktseite öffnen</a>
           </section>
           <section class="blk">
-            <h2>Im Raum <span class="count" id="itemCount"></span></h2>
+            <div class="row" style="justify-content:space-between"><h2>Im Raum <span class="count" id="itemCount"></span></h2><button type="button" class="btn small danger" id="clearItems" hidden>Alle Möbel entfernen</button></div>
             <ul class="list" id="itemList"></ul>
             <p class="muted" id="noItems">Noch keine Möbel. Füge oben einen Produkt-Link ein.</p>
           </section>
@@ -387,7 +387,7 @@ const CATS = {
   sofa: ['Sofa', 220, 95, 85, '#7d8791'], sofa_l: ['Sofa mit Ottomane links', 280, 165, 85, '#7d8791'], sofa_r: ['Sofa mit Ottomane rechts', 280, 165, 85, '#7d8791'], sessel: ['Sessel', 85, 85, 90, '#a68a6d'], bett: ['Bett', 160, 200, 100, '#b3aa9c'],
   tisch: ['Tisch', 160, 90, 75, '#b08a5b'], rundtisch: ['Runder Tisch', 100, 100, 75, '#b08a5b'], stuhl: ['Stuhl', 45, 52, 85, '#5b5f66'],
   regal: ['Regal', 80, 30, 200, '#e6e0d5'], schrank: ['Schrank / Kommode', 100, 58, 200, '#e6e0d5'], leuchte: ['Leuchte', 40, 40, 160, '#d9c7a1'],
-  pflanze: ['Pflanze', 60, 60, 140, '#4f7d4a'], teppich: ['Teppich', 200, 300, 1.5, '#b7a79a'], tv: ['Fernseher', 123, 6, 71, '#15171a'],
+  pflanze: ['Pflanze', 60, 60, 140, '#4f7d4a'], pflanze2: ['Pflanze 2 (Monstera, Palme)', 90, 90, 170, '#3f7a45'], treppe: ['Treppe aufwärts', 100, 300, 270, '#b9a58a'], treppe_ab: ['Treppe abwärts', 100, 300, 270, '#b9a58a'], teppich: ['Teppich', 200, 300, 1.5, '#b7a79a'], tv: ['Fernseher', 123, 6, 71, '#15171a'],
   bild: ['Wandbild', 70, 3, 100, '#d8d2c6'], box: ['Sonstiges', 80, 60, 80, '#a7adb5']
 };
 const FLOORS = { holz: ['Holz', '#c9a574', 1.6], fliese: ['Fliesen', '#d9d6cf', 1.2], teppich: ['Teppichboden', '#b9b3a8', 1], beton: ['Beton', '#a9aaa8', 2.4], farbe: ['Einfarbig', '#d8d2c4', 1] };
@@ -906,12 +906,18 @@ function draw2D() {
     const on = sel && sel.type === 'item' && sel.id === it.id, w = it.w / 100 * s, d = it.d / 100 * s;
     x.save(); x.translate(X(it.x), Y(it.y)); x.rotate(it.rot * Math.PI / 180);
     x.globalAlpha = flat ? 0.55 : 0.9; x.fillStyle = it.color;
-    if (it.cat === 'sofa_l' || it.cat === 'sofa_r') {
+    if (it.cat === 'treppe' || it.cat === 'treppe_ab') {
+      /* Treppe im Grundriss: Stufenlinien und ein Pfeil in Laufrichtung nach oben. */
+      const n = Math.max(3, Math.round(it.h / 18)), up = it.cat === 'treppe' ? -1 : 1, tip = up * d * 0.4, hd = Math.min(w, d) * 0.16;
+      x.fillRect(-w / 2, -d / 2, w, d); x.globalAlpha = 1; x.strokeStyle = on ? C.accent : C.ink; x.lineWidth = on ? 3 : 1.2; x.strokeRect(-w / 2, -d / 2, w, d);
+      x.strokeStyle = C.ink; x.lineWidth = 1; x.beginPath(); for (let i = 1; i < n; i++) { const yy = -d / 2 + d * i / n; x.moveTo(-w / 2, yy); x.lineTo(w / 2, yy); } x.stroke();
+      x.lineWidth = 1.8; x.beginPath(); x.moveTo(0, -tip); x.lineTo(0, tip); x.moveTo(-hd, tip - up * hd); x.lineTo(0, tip); x.lineTo(hd, tip - up * hd); x.stroke();
+    } else if (it.cat === 'sofa_l' || it.cat === 'sofa_r') {
       const L = lShape(it), m = L.sx, op = L.ow * s, bp = L.bd * s;
       x.beginPath(); x.moveTo(-m * w / 2, -d / 2); x.lineTo(m * w / 2, -d / 2); x.lineTo(m * w / 2, d / 2); x.lineTo(m * (w / 2 - op), d / 2); x.lineTo(m * (w / 2 - op), -d / 2 + bp); x.lineTo(-m * w / 2, -d / 2 + bp); x.closePath(); x.fill();
       x.globalAlpha = 1; x.strokeStyle = on ? C.accent : C.ink; x.lineWidth = on ? 3 : 1.2; x.stroke();
       x.beginPath(); x.moveTo(-m * w / 2 + m * 3, -d / 2 + bp - 3); x.lineTo(m * (w / 2 - op) - m * 3, -d / 2 + bp - 3); x.lineWidth = 2; x.stroke();
-    } else if (it.cat === 'rundtisch' || it.cat === 'pflanze' || it.cat === 'leuchte') { x.beginPath(); x.ellipse(0, 0, w / 2, d / 2, 0, 0, 7); x.fill(); x.globalAlpha = 1; x.strokeStyle = on ? C.accent : C.ink; x.lineWidth = on ? 3 : 1.2; x.stroke(); }
+    } else if (it.cat === 'rundtisch' || it.cat === 'pflanze' || it.cat === 'pflanze2' || it.cat === 'leuchte') { x.beginPath(); x.ellipse(0, 0, w / 2, d / 2, 0, 0, 7); x.fill(); x.globalAlpha = 1; x.strokeStyle = on ? C.accent : C.ink; x.lineWidth = on ? 3 : 1.2; x.stroke(); }
     else { x.fillRect(-w / 2, -d / 2, w, d); x.globalAlpha = 1; x.strokeStyle = on ? C.accent : C.ink; x.lineWidth = on ? 3 : 1.2; x.strokeRect(-w / 2, -d / 2, w, d); if (!flat) { x.beginPath(); x.moveTo(-w / 2 + 3, d / 2 - 3); x.lineTo(w / 2 - 3, d / 2 - 3); x.lineWidth = 2; x.stroke(); } }
     x.restore();
   }
@@ -1129,6 +1135,27 @@ function buildItem(it) {
   const main = st ? M('#ffffff', { map: st }) : M(c), dark = st ? M('#b0b0b0', { map: st }) : M(shade(c, -0.3)), light = st ? M('#ffffff', { map: st }) : M(shade(c, 0.2));
   const legs = (m, t, h, ix, iz) => { for (const sx of [-1, 1]) for (const sz of [-1, 1]) B(m, t, h, t, sx * (W / 2 - ix), h / 2, sz * (D / 2 - iz)); };
   switch (it.cat) {
+    case 'treppe': { const n = Math.max(3, Math.round(H / 0.18)), sd = D / n; for (let i = 0; i < n; i++) { const h = H * (i + 1) / n; B(main, W, 0.05, sd + 0.02, 0, h - 0.025, D / 2 - (i + 0.5) * sd); } break; }
+    case 'treppe_ab': {
+      /* Abwärts: dunkler Treppenschacht im Boden mit nach unten dunkler werdenden Stufen und einem Geländer an drei Seiten. */
+      const n = Math.max(3, Math.round(H / 0.18)), sd = D / n, rail = M('#3a3d42');
+      B(dark, W + 0.06, 0.01, D + 0.06, 0, 0.005, 0).castShadow = false;
+      for (let i = 0; i < n; i++) B(st ? M(shade('#ffffff', -0.2 - 0.7 * (i + 1) / n), { map: st }) : M(shade(c, -0.2 - 0.7 * (i + 1) / n)), W, 0.004, sd, 0, 0.013, D / 2 - (i + 0.5) * sd).castShadow = false;
+      for (const sx of [-1, 1]) { B(rail, 0.03, 0.03, D, sx * (W / 2 + 0.015), 0.95, 0); for (const sz of [-1, 0, 1]) B(rail, 0.03, 0.95, 0.03, sx * (W / 2 + 0.015), 0.475, sz * (D / 2 - 0.015)); }
+      B(rail, W + 0.06, 0.03, 0.03, 0, 0.95, -D / 2);
+      break;
+    }
+    case 'pflanze2': {
+      const r = Math.min(W, D) / 2, ph = Math.min(0.42, H * 0.24), leaf = M(c, { flatShading: true }), stem = M(shade(c, -0.3)), n = 9;
+      add(new THREE.CylinderGeometry(r * 0.42, r * 0.32, ph, 20), M('#8d8f92'), 0, ph / 2, 0);
+      for (let i = 0; i < n; i++) {
+        const L = (H - ph) * (0.5 + 0.45 * ((i * 4) % n) / n), tilt = Math.asin(Math.min(0.85, r * 0.6 / L)) * (0.3 + 0.7 * ((i * 7) % n) / n), piv = new THREE.Group(), arm = new THREE.Group();
+        piv.position.set(0, ph, 0); piv.rotation.y = i * 2.399; arm.rotation.z = -tilt; piv.add(arm); g.add(piv);
+        const sm = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.016, L, 6), stem); sm.position.y = L / 2; sm.castShadow = true; arm.add(sm);
+        const lf = new THREE.Mesh(new THREE.SphereGeometry(1, 10, 6), leaf); lf.scale.set(r * 0.6, 0.014, r * 0.38); lf.position.set(r * 0.42, L, 0); lf.rotation.z = -0.5; lf.castShadow = true; lf.receiveShadow = true; arm.add(lf);
+      }
+      break;
+    }
     case 'sofa_l': case 'sofa_r': {
       const L = lShape(it), sx = L.sx, bd = L.bd, ow = L.ow, arm = Math.min(0.22, W * 0.1), back = Math.min(0.26, bd * 0.28), seat = Math.min(0.45, H * 0.55), base = seat * 0.6, zb = -D / 2, ol = D - bd, inner = W - 2 * arm, oc = ow - arm, rest = inner - oc, n = rest > 1.7 ? 3 : rest > 1.05 ? 2 : 1, cw = rest / n, bh = Math.max(0.1, H - seat - 0.04);
       B(dark, W - 0.04, 0.05, bd - 0.04, 0, 0.025, zb + bd / 2); B(main, W, base - 0.05, bd, 0, 0.05 + (base - 0.05) / 2, zb + bd / 2);
@@ -1354,7 +1381,7 @@ function renderPanel() {
     b.append(sw, tx); b.addEventListener('click', () => { sel = { type: 'item', id: it.id }; refresh(); if (view3) mark3D(); });
     li.appendChild(b); il.appendChild(li);
   }
-  $('#itemCount').textContent = S.items.length ? String(S.items.length) : ''; $('#noItems').hidden = !!S.items.length;
+  $('#itemCount').textContent = S.items.length ? String(S.items.length) : ''; $('#noItems').hidden = !!S.items.length; $('#clearItems').hidden = !S.items.length;
 }
 function syncForm() {
   const it = cur(), t = it || draft;
@@ -1703,7 +1730,7 @@ function decorate(sel, name) {
 (function wire() {
   const IC = { '[data-tool="select"]': 'select', '[data-tool="draw"]': 'draw', '[data-tool="wand"]': 'wand', '#wDel': 'trash', '[data-tool="tuer"]': 'tuer', '[data-tool="fenster"]': 'fenster', '[data-tool="scale"]': 'scale', '#fitBtn': 'fit',
     '[data-cam="orbit"]': 'cube', '[data-cam="top"]': 'top', '[data-cam="walk"]': 'eye', '#snapBtn': 'magnet', '#shotBtn': 'camera',
-    '#undoBtn': 'undo', '#shareBtn': 'link', '#expBtn': 'exp', 'label[for="impFile"]': 'imp', '#view2d': 'plan', '#view3d': 'cube',
+    '#undoBtn': 'undo', '#shareBtn': 'link', '#clearItems': 'trash', '#expBtn': 'exp', 'label[for="impFile"]': 'imp', '#view2d': 'plan', '#view3d': 'cube',
     '#rotL': 'rotL', '#rotR': 'rotR', '#rot90': 'rotR', '#fDup': 'dup', '#fDel': 'trash', '#oDel': 'trash', '#planRemove': 'trash' };
   for (const k in IC) decorate(k, IC[k]);
   const sel$ = $('#fCat'); for (const k in CATS) { const o = el('option', '', CATS[k][0]); o.value = k; sel$.appendChild(o); }
@@ -1768,6 +1795,13 @@ function decorate(sel, name) {
     catch (er) { toast('Dieses Bild konnte nicht gelesen werden.'); }
   });
   $('#fTexClear').addEventListener('click', () => { const it = cur(); if (it) change(() => { it.tex = null; }); else { draft.tex = null; syncForm(); } });
+  { let armT = 0; const cb = $('#clearItems'), lb = () => cb.querySelector('.lb') || cb, disarm = () => { clearTimeout(armT); delete cb.dataset.arm; lb().textContent = 'Alle Möbel entfernen'; };
+    cb.addEventListener('click', () => {
+      if (!loaded || !S.items.length) return;
+      if (cb.dataset.arm) { const n = S.items.length; disarm(); change(() => { S.items = []; if (sel && sel.type === 'item') sel = null; }); toast(n + ' Möbel entfernt. „Rückgängig“ stellt sie wieder her.'); }
+      else { cb.dataset.arm = '1'; lb().textContent = 'Wirklich alle ' + S.items.length + ' entfernen?'; armT = setTimeout(disarm, 4000); }
+    });
+  }
   $('#fAdd').addEventListener('click', addDraft);
   const rot = d => { const it = cur(); if (it) change(() => { it.rot = (((it.rot + d) % 360) + 360) % 360; }); };
   $('#rotL').addEventListener('click', () => rot(-15)); $('#rotR').addEventListener('click', () => rot(15)); $('#rot90').addEventListener('click', () => rot(90));
