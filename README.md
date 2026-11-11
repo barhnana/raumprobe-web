@@ -16,7 +16,6 @@ Grundriss hochladen, Räume zeichnen und Möbel maßstabsgetreu in 3D im Raum pl
 - Automatisches Speichern im Browser, ohne Konto
 - Design per Link teilen, ohne Dateien zu verschicken
 - Projekt als JSON-Datei exportieren und wieder importieren
-- Oberflächen aus Fotos: Farbe und Struktur für Möbel und Böden
 - Helle und dunkle Oberfläche
 
 ## Nutzung

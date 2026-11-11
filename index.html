@@ -350,12 +350,6 @@ a.plink{font-size:13px;color:var(--blue);overflow-wrap:anywhere}
               <label class="field" for="fElev">Über Boden cm<input class="num" id="fElev" inputmode="decimal"></label>
               <label class="field" for="fRot">Drehung °<input class="num" id="fRot" inputmode="decimal"></label>
             </div>
-            <div class="row">
-              <span class="sw" id="fTexThumb" hidden style="width:30px;height:30px"></span>
-              <label class="btn small" for="fTexFile" title="Farbe und Struktur aus einem Foto des Stoffs oder Materials übernehmen">Oberfläche aus Bild</label>
-              <input class="vh" type="file" id="fTexFile" accept="image/*,.heic,.heif">
-              <button type="button" class="btn small" id="fTexClear" hidden>Bild entfernen</button>
-            </div>
             <div class="row" id="newBtns"><button type="button" class="btn primary" id="fAdd">In den Raum stellen</button></div>
             <div class="row" id="editBtns" hidden>
               <button type="button" class="btn small" id="rotL">−15°</button>
@@ -418,7 +412,7 @@ function cleanState(raw) {
     const pts = r.pts.filter(q => Array.isArray(q) && Number.isFinite(q[0]) && Number.isFinite(q[1])).slice(0, 80).map(q => [clamp(q[0], -500, 500), clamp(q[1], -500, 500)]);
     if (pts.length < 3) continue;
     const fl = FLOORS[r.floor] ? r.floor : 'holz';
-    s.rooms.push({ id: str(r.id, 24) || uid(), name: str(r.name, 60) || 'Raum', pts, floor: fl, floorColor: hex(r.floorColor, FLOORS[fl][1]), floorTex: typeof r.floorTex === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(r.floorTex) ? r.floorTex : null });
+    s.rooms.push({ id: str(r.id, 24) || uid(), name: str(r.name, 60) || 'Raum', pts, floor: fl, floorColor: hex(r.floorColor, FLOORS[fl][1]) });
   }
   if (Array.isArray(raw.openings)) for (const o of raw.openings.slice(0, 300)) {
     if (!o || typeof o !== 'object') continue;
@@ -437,7 +431,7 @@ function cleanState(raw) {
       id: str(it.id, 24) || uid(), name: str(it.name, 80) || c[0], url: /^https?:\/\//i.test(url) ? url : '', cat,
       w: num(it.w, c[1], 1, 1000), d: num(it.d, c[2], 1, 1000), h: num(it.h, c[3], 0.2, 600), color: hex(it.color, c[4]),
       x: num(it.x, 0, -500, 500), y: num(it.y, 0, -500, 500), rot: ((num(it.rot, 0, -100000, 100000) % 360) + 360) % 360, elev: num(it.elev, 0, 0, 500),
-      img: typeof it.img === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(it.img) ? it.img : null, price: str(it.price, 40), ow: num(it.ow, 0, 0, 1000), bd: num(it.bd, 0, 0, 1000), tex: typeof it.tex === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(it.tex) ? it.tex : null
+      img: typeof it.img === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(it.img) ? it.img : null, price: str(it.price, 40), ow: num(it.ow, 0, 0, 1000), bd: num(it.bd, 0, 0, 1000)
     });
   }
   return s;
@@ -586,7 +580,7 @@ let loaded = false, dirty = false, undo = [];
 let sel = null, tool = 'select', view3 = false, snapOn = true;
 let drawPts = null, hoverW = null, cal = null, wallStart = null;
 let planImg = null, planKey = null;
-const planCache = {}, localImgs = {}, texLocal = {};
+const planCache = {}, localImgs = {};
 const V = { s: 60, ox: 40, oy: 40 };
 let C = {};
 const cap = { sampleImages: false, downloads: null }, capP = {};
@@ -598,7 +592,7 @@ let docRef = null, saveT = 0, writing = false, again = false, lastRev = 0, readO
 let draft = newDraft(), draftLocal = null, busy = false;
 let pdfDoc = null, pdfFile = '', pdfPxPerPt = 0;
 
-function newDraft() { return { name: '', url: '', cat: 'box', w: 80, d: 60, h: 80, color: '#a7adb5', elev: 0, rot: 0, img: null, price: '', ow: 0, bd: 0, tex: null, blob: null, touched: false }; }
+function newDraft() { return { name: '', url: '', cat: 'box', w: 80, d: 60, h: 80, color: '#a7adb5', elev: 0, rot: 0, img: null, price: '', ow: 0, bd: 0, blob: null, touched: false }; }
 function cur() { return sel && sel.type === 'item' ? S.items.find(i => i.id === sel.id) || null : null; }
 function imgUrl(it) { return localImgs[it.id] || (it.img ? '/_blob/' + it.img : null); }
 function readColors() { const cs = getComputedStyle(document.documentElement), g = n => cs.getPropertyValue(n).trim(); C = { ink: g('--ink'), ink2: g('--ink-2'), line: g('--line'), blue: g('--blue'), accent: g('--accent'), stage: g('--stage'), grid: g('--grid'), room: g('--room'), raised: g('--raised'), danger: g('--danger'), skyB: g('--sky-b') }; }
@@ -1066,7 +1060,7 @@ function hint() {
 }
 
 /* ---------- 3D-Raum ---------- */
-const T = { ok: false, tex: {}, itex: {}, surf: {}, items: {}, planTex: null, raf: 0 };
+const T = { ok: false, tex: {}, itex: {}, items: {}, planTex: null, raf: 0 };
 const lin = h => new THREE.Color(h).convertSRGBToLinear();
 function rng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 function msg3D(t) { $('#msg3dText').textContent = t; $('#msg3d').hidden = !t; }
@@ -1124,32 +1118,13 @@ function floorTex(type, color) {
 function itemTex(it) { const src = imgUrl(it); if (!src) return null; if (!T.itex[src]) { const t = new THREE.TextureLoader().load(src, () => render3D()); t.encoding = THREE.sRGBEncoding; T.itex[src] = t; } return T.itex[src]; }
 /* Sofa mit Ottomane: Tiefe des Sofateils und Breite der Ottomane in Metern, aus Gesamtbreite und Gesamttiefe abgeleitet. */
 function lShape(it) { const W = it.w / 100, D = it.d / 100; return { bd: it.bd > 0 ? clamp(it.bd / 100, 0.3, D) : Math.min(D, clamp(D * 0.6, 0.8, 1.05)), ow: it.ow > 0 ? Math.max(0.2, Math.min(it.ow / 100, W - 0.3)) : Math.min(W * 0.45, clamp(W * 0.36, 0.75, 1.15)), sx: it.cat === 'sofa_l' ? -1 : 1 }; }
-/* Oberfläche aus einem Foto: mittlerer Ausschnitt als Kachel, Durchschnittsfarbe für Grundriss und Liste. */
-async function surfaceFromFile(file) {
-  const cv = await fileToCanvas(file), side = Math.min(cv.width, cv.height), t = document.createElement('canvas'); t.width = t.height = 256;
-  const x = t.getContext('2d'); x.drawImage(cv, (cv.width - side) / 2, (cv.height - side) / 2, side, side, 0, 0, 256, 256);
-  const d = x.getImageData(0, 0, 256, 256).data; let r = 0, g = 0, b = 0, n = 0; for (let i = 0; i < d.length; i += 16) { r += d[i]; g += d[i + 1]; b += d[i + 2]; n++; }
-  const color = '#' + [r, g, b].map(v => Math.round(v / n).toString(16).padStart(2, '0')).join('');
-  const blob = await toBlob(t, 'image/jpeg', 0.88); let id = 'local-' + uid(); texLocal[id] = URL.createObjectURL(blob);
-  const assets = await capP.assets;
-  if (assets) { try { const up = await assets.upload(blob, { type: 'image/jpeg' }); texLocal[up.id] = texLocal[id]; id = up.id; } catch (e) { toast('Das Bild der Oberfläche bleibt nur bis zum Neuladen erhalten.'); } }
-  return { color, id };
-}
-function surfTex(id, rep) {
-  const base = T.surf[id] || (T.surf[id] = { tex: null, st: 0, v: {} });
-  if (base.st === 0) { base.st = 1; const im = new Image(); im.onload = () => { const t = new THREE.Texture(im); t.encoding = THREE.sRGBEncoding; t.wrapS = t.wrapT = THREE.MirroredRepeatWrapping; t.needsUpdate = true; base.tex = t; base.st = 2; if (view3) rebuild3D(); }; im.onerror = () => { base.st = 3; }; im.src = texLocal[id] || '/_blob/' + id; }
-  if (!base.tex) return null;
-  if (!base.v[rep]) { const c = base.tex.clone(); c.repeat.set(rep, rep); c.needsUpdate = true; base.v[rep] = c; }
-  return base.v[rep];
-}
 function buildItem(it) {
   const g = new THREE.Group(); g.userData.id = it.id;
   const W = it.w / 100, D = it.d / 100, H = Math.max(it.h / 100, 0.005), c = it.color;
   const M = (h, o) => new THREE.MeshStandardMaterial(Object.assign({ color: lin(h), roughness: 0.85, metalness: 0 }, o || {}));
   const add = (geo, m, x, y, z) => { const me = new THREE.Mesh(geo, m); me.position.set(x, y, z); me.castShadow = true; me.receiveShadow = true; g.add(me); return me; };
   const B = (m, w, h, d, x, y, z) => add(new THREE.BoxGeometry(Math.max(w, 0.004), Math.max(h, 0.004), Math.max(d, 0.004)), m, x, y, z);
-  const st = it.tex ? surfTex(it.tex, clamp(Math.round(Math.max(W, D, H) / 0.6), 1, 8)) : null;
-  const main = st ? M('#ffffff', { map: st }) : M(c), dark = st ? M('#b0b0b0', { map: st }) : M(shade(c, -0.3)), light = st ? M('#ffffff', { map: st }) : M(shade(c, 0.2));
+  const main = M(c), dark = M(shade(c, -0.3)), light = M(shade(c, 0.2));
   const legs = (m, t, h, ix, iz) => { for (const sx of [-1, 1]) for (const sz of [-1, 1]) B(m, t, h, t, sx * (W / 2 - ix), h / 2, sz * (D / 2 - iz)); };
   switch (it.cat) {
     case 'treppe': { const n = Math.max(3, Math.round(H / 0.18)), sd = D / n; for (let i = 0; i < n; i++) { const h = H * (i + 1) / n; B(main, W, 0.05, sd + 0.02, 0, h - 0.025, D / 2 - (i + 0.5) * sd); } break; }
@@ -1157,7 +1132,7 @@ function buildItem(it) {
       /* Abwärts: dunkler Treppenschacht im Boden mit nach unten dunkler werdenden Stufen und einem Geländer an drei Seiten. */
       const n = Math.max(3, Math.round(H / 0.18)), sd = D / n, rail = M('#3a3d42');
       B(dark, W + 0.06, 0.01, D + 0.06, 0, 0.005, 0).castShadow = false;
-      for (let i = 0; i < n; i++) B(st ? M(shade('#ffffff', -0.2 - 0.7 * (i + 1) / n), { map: st }) : M(shade(c, -0.2 - 0.7 * (i + 1) / n)), W, 0.004, sd, 0, 0.013, D / 2 - (i + 0.5) * sd).castShadow = false;
+      for (let i = 0; i < n; i++) B(M(shade(c, -0.2 - 0.7 * (i + 1) / n)), W, 0.004, sd, 0, 0.013, D / 2 - (i + 0.5) * sd).castShadow = false;
       for (const sx of [-1, 1]) { B(rail, 0.03, 0.03, D, sx * (W / 2 + 0.015), 0.95, 0); for (const sz of [-1, 0, 1]) B(rail, 0.03, 0.95, 0.03, sx * (W / 2 + 0.015), 0.475, sz * (D / 2 - 0.015)); }
       B(rail, W + 0.06, 0.03, 0.03, 0, 0.95, -D / 2);
       break;
@@ -1236,7 +1211,7 @@ function rebuild3D() {
     me.rotation.x = -Math.PI / 2; me.position.set(w / 2, S.rooms.length ? 0.006 : 0, h / 2); me.renderOrder = 1; T.world.add(me);
   }
   for (const r of S.rooms) {
-    const tex = (r.floorTex && surfTex(r.floorTex, 1)) || floorTex(r.floor, r.floorColor), g = new THREE.ShapeGeometry(new THREE.Shape(r.pts.map(p => new THREE.Vector2(p[0], p[1])))); g.rotateX(Math.PI / 2);
+    const tex = floorTex(r.floor, r.floorColor), g = new THREE.ShapeGeometry(new THREE.Shape(r.pts.map(p => new THREE.Vector2(p[0], p[1])))); g.rotateX(Math.PI / 2);
     const me = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: tex ? 0xffffff : lin(r.floorColor), map: tex, roughness: 0.92, metalness: 0, side: THREE.DoubleSide })); me.receiveShadow = true; T.world.add(me);
   }
   const wallM = () => new THREE.MeshStandardMaterial({ color: lin(S.wallColor), roughness: 0.96, metalness: 0 });
@@ -1373,15 +1348,12 @@ function renderPanel() {
     name.addEventListener('change', () => change(() => { r.name = name.value.trim().slice(0, 60) || 'Raum'; }));
     name.addEventListener('focus', () => { if (!(sel && sel.type === 'room' && sel.id === r.id)) { sel = { type: 'room', id: r.id }; draw2D(); } });
     const sub = el('div', 'sub'), fl = el('select', 'inp'); fl.id = 'rf-' + r.id; fl.setAttribute('aria-label', 'Bodenbelag');
-    for (const k in FLOORS) { const o = el('option', '', FLOORS[k][0]); o.value = k; fl.appendChild(o); }
-    if (r.floorTex) { const o = el('option', '', 'Aus Bild'); o.value = ''; fl.appendChild(o); fl.value = ''; } else fl.value = r.floor;
-    fl.addEventListener('change', () => { if (FLOORS[fl.value]) change(() => { r.floor = fl.value; r.floorColor = FLOORS[fl.value][1]; r.floorTex = null; }); });
-    const pic = el('label', 'btn small', r.floorTex ? 'Bild ändern' : 'Bild'), pin = el('input', 'vh'); pin.type = 'file'; pin.accept = 'image/*,.heic,.heif'; pin.id = 'rp-' + r.id; pic.htmlFor = pin.id; pic.title = 'Farbe und Struktur des Bodens aus einem Foto übernehmen';
-    pin.addEventListener('change', async () => { const f = pin.files[0]; if (!f || !loaded) return; try { const sf = await surfaceFromFile(f), rr = S.rooms.find(z => z.id === r.id); if (rr) change(() => { rr.floorTex = sf.id; rr.floorColor = sf.color; }); } catch (e) { toast('Dieses Bild konnte nicht gelesen werden.'); } });
+    for (const k in FLOORS) { const o = el('option', '', FLOORS[k][0]); o.value = k; fl.appendChild(o); } fl.value = r.floor;
+    fl.addEventListener('change', () => change(() => { r.floor = fl.value; r.floorColor = FLOORS[fl.value][1]; }));
     const col = el('input', 'inp'); col.type = 'color'; col.value = r.floorColor; col.id = 'rc-' + r.id; col.setAttribute('aria-label', 'Farbe des Bodens');
-    col.addEventListener('change', () => change(() => { r.floorColor = hex(col.value, r.floorColor); r.floorTex = null; }));
+    col.addEventListener('change', () => change(() => { r.floorColor = hex(col.value, r.floorColor); }));
     const del = el('button', 'btn small danger', 'Entfernen'); del.type = 'button'; del.addEventListener('click', () => { sel = { type: 'room', id: r.id }; deleteSel(); });
-    sub.append(fl, col, pic, pin, del); li.append(name, el('span', 'area', de(Math.abs(polyArea(r.pts)), 2) + ' m²'), sub); ul.appendChild(li);
+    sub.append(fl, col, del); li.append(name, el('span', 'area', de(Math.abs(polyArea(r.pts)), 2) + ' m²'), sub); ul.appendChild(li);
   }
   const o = sel && sel.type === 'opening' ? S.openings.find(q => q.id === sel.id) : null;
   $('#openEd').hidden = !o; $('#openEd').style.display = o ? 'flex' : 'none';
@@ -1405,8 +1377,6 @@ function syncForm() {
   $('#formTitle').textContent = it ? 'Ausgewähltes Möbel' : 'Produkt hinzufügen';
   $('#newOnly').hidden = !!it; $('#newOnly').style.display = it ? 'none' : 'flex'; $('#newBtns').hidden = !!it; $('#editBtns').hidden = !it;
   setVal('#fName', t.name); setVal('#fCat', t.cat); setVal('#fW', deNum(t.w)); setVal('#fD', deNum(t.cat === 'sofa_l' || t.cat === 'sofa_r' ? lShape(t).bd * 100 : t.d)); setVal('#fH', deNum(t.h)); setVal('#fColor', t.color); setVal('#fElev', deNum(t.elev)); setVal('#fRot', deNum(t.rot));
-  const tt = $('#fTexThumb'); tt.hidden = !t.tex; tt.textContent = ''; $('#fTexClear').hidden = !t.tex;
-  if (t.tex) { const im = el('img'); im.alt = 'Oberfläche'; im.src = texLocal[t.tex] || '/_blob/' + t.tex; tt.appendChild(im); }
   const ott = t.cat === 'sofa_l' || t.cat === 'sofa_r'; $('#ottRow').hidden = !ott;
   if (ott) { const L = lShape(t); setVal('#fOW', deNum(L.ow * 100)); setVal('#fOD', deNum(t.d)); }
   const th = $('#pThumb'), u = it ? imgUrl(it) : draftLocal; th.textContent = '';
@@ -1426,7 +1396,7 @@ function readForm(e) {
       else if (o1 && !o2) { if (!def && t.bd > 0) t.d = t.bd; t.bd = 0; t.ow = 0; $('#fD').value = deNum(t.d); }
     }
     t.w = num($('#fW').value, t.w, 1, 1000); if (t.cat === 'sofa_l' || t.cat === 'sofa_r') { t.bd = num($('#fD').value, lShape(t).bd * 100, 30, 600); if (id === 'fOD') t.d = num($('#fOD').value, t.d, 30, 1000); t.d = Math.max(t.d, t.bd); } else t.d = num($('#fD').value, t.d, 1, 1000); t.h = num($('#fH').value, t.h, 0.2, 600);
-    t.color = hex($('#fColor').value, t.color); if (id === 'fColor') t.tex = null; t.elev = num($('#fElev').value, t.elev, 0, 500); t.rot = ((num($('#fRot').value, t.rot, -3600, 3600) % 360) + 360) % 360;
+    t.color = hex($('#fColor').value, t.color); t.elev = num($('#fElev').value, t.elev, 0, 500); t.rot = ((num($('#fRot').value, t.rot, -3600, 3600) % 360) + 360) % 360;
     if (id === 'fOW') t.ow = num($('#fOW').value, t.ow, 20, 600);    if (!it && /^f(W|D|H|Color)$/.test(id)) t.touched = true;
   };
   if (it) change(() => { apply(it); if (!it.name) it.name = CATS[it.cat][0]; }); else { apply(draft); syncForm(); }
@@ -1444,7 +1414,7 @@ function addDraft() {
   if (!loaded) return;
   const p = dropPoint(), d = draft, id = uid();
   if (draftLocal) localImgs[id] = draftLocal;
-  change(() => { S.items.push({ id, name: d.name || CATS[d.cat][0], url: /^https?:\/\//i.test(d.url) ? d.url : '', cat: d.cat, w: d.w, d: d.d, h: d.h, color: d.color, x: p[0], y: p[1], rot: d.rot, elev: d.elev, img: d.img, price: d.price, ow: d.ow, bd: d.bd, tex: d.tex }); sel = { type: 'item', id }; });
+  change(() => { S.items.push({ id, name: d.name || CATS[d.cat][0], url: /^https?:\/\//i.test(d.url) ? d.url : '', cat: d.cat, w: d.w, d: d.d, h: d.h, color: d.color, x: p[0], y: p[1], rot: d.rot, elev: d.elev, img: d.img, price: d.price, ow: d.ow, bd: d.bd }); sel = { type: 'item', id }; });
   draft = newDraft(); draftLocal = null; $('#pUrl').value = ''; $('#pText').value = ''; pState('Steht im Raum. Zieh es an seinen Platz – in der 3D-Ansicht oder im Grundriss.'); refresh();
 }
 function pState(t, err) { const e = $('#pState'); e.textContent = t; e.classList.toggle('err', !!err); }
@@ -1627,7 +1597,6 @@ async function buildExport() {
   if (S.plan && planImg) { const k = 'plan:' + S.plan.key; if (!dataCache[k]) { try { dataCache[k] = canvasFromImage(planImg, S.plan.w, S.plan.h, 4000).toDataURL('image/jpeg', 0.88); } catch (e) {} } out.planImage = dataCache[k] || null; }
   const grab = async (k, u, max) => { if (!u || k in out.itemImages) return; if (!dataCache[u]) dataCache[u] = /^data:image\//.test(u) ? u : await imgToDataUrl(u, max); if (dataCache[u]) out.itemImages[k] = dataCache[u]; };
   for (const it of S.items) await grab(it.img || it.id, imgUrl(it), 640);
-  for (const id of new Set(S.items.map(i => i.tex).concat(S.rooms.map(r => r.floorTex)).filter(Boolean))) await grab(id, texLocal[id] || '/_blob/' + id, 256);
   return out;
 }
 async function exportProject() {
@@ -1655,7 +1624,6 @@ async function loadProject(j) {
   }
   S = next; sel = null; drawPts = null; cal = null;
   const imgs = j.itemImages && typeof j.itemImages === 'object' ? j.itemImages : {};
-  for (const k in imgs) if (typeof imgs[k] === 'string' && /^data:image\/(jpeg|png);base64,/.test(imgs[k])) texLocal[k] = imgs[k];
   for (const it of S.items) { const d = imgs[it.img] || imgs[it.id]; if (typeof d === 'string' && /^data:image\/(jpeg|png);base64,/.test(d)) localImgs[it.id] = d; }
   planKey = null; syncPlanImage();
   return cv;
@@ -1810,12 +1778,6 @@ function decorate(sel, name) {
   $('#pImg').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; productImage(f); });
   $('#pImgAI').addEventListener('click', detectFromImage);
   for (const id of ['#fName', '#fCat', '#fW', '#fD', '#fH', '#fColor', '#fElev', '#fRot', '#fOW', '#fOD']) $(id).addEventListener('change', readForm);
-  $('#fTexFile').addEventListener('change', async e => {
-    const f = e.target.files[0]; e.target.value = ''; if (!f || !loaded) return; const id0 = sel && sel.type === 'item' ? sel.id : null;
-    try { const sf = await surfaceFromFile(f), it = id0 ? S.items.find(i => i.id === id0) : null; if (it) change(() => { it.tex = sf.id; it.color = sf.color; }); else if (!id0) { draft.tex = sf.id; draft.color = sf.color; draft.touched = true; syncForm(); } }
-    catch (er) { toast('Dieses Bild konnte nicht gelesen werden.'); }
-  });
-  $('#fTexClear').addEventListener('click', () => { const it = cur(); if (it) change(() => { it.tex = null; }); else { draft.tex = null; syncForm(); } });
   { let armT = 0; const cb = $('#clearItems'), lb = () => cb.querySelector('.lb') || cb, disarm = () => { clearTimeout(armT); delete cb.dataset.arm; lb().textContent = 'Alle Möbel entfernen'; };
     cb.addEventListener('click', () => {
       if (!loaded || !S.items.length) return;
