@@ -278,7 +278,7 @@ a.plink{font-size:13px;color:var(--blue);overflow-wrap:anywhere}
             </div>
           </section>
           <section class="blk">
-            <h2><span class="step">3</span> Räume und Wände</h2>
+            <div class="row" style="justify-content:space-between"><h2><span class="step">3</span> Räume und Wände</h2><button type="button" class="btn small danger" id="clearRooms" hidden title="Alle Räume, freistehenden Wände, Türen und Fenster entfernen. Möbel und Grundriss bleiben.">Alle entfernen</button></div>
             <div class="row">
               <button type="button" class="btn" id="drawBtn">Raum zeichnen</button>
               <button type="button" class="btn" id="wallBtn">Einzelne Wand ziehen</button>
@@ -1377,7 +1377,7 @@ function renderPanel() {
     b.append(sw, tx); b.addEventListener('click', () => { sel = { type: 'item', id: it.id }; refresh(); if (view3) mark3D(); });
     li.appendChild(b); il.appendChild(li);
   }
-  $('#itemCount').textContent = S.items.length ? String(S.items.length) : ''; $('#noItems').hidden = !!S.items.length; $('#clearItems').hidden = !S.items.length;
+  $('#itemCount').textContent = S.items.length ? String(S.items.length) : ''; $('#noItems').hidden = !!S.items.length; $('#clearItems').hidden = !S.items.length; $('#clearRooms').hidden = !(S.rooms.length || S.walls.length);
 }
 function syncForm() {
   const it = cur(), t = it || draft;
@@ -1726,7 +1726,7 @@ function decorate(sel, name) {
 (function wire() {
   const IC = { '[data-tool="select"]': 'select', '[data-tool="draw"]': 'draw', '[data-tool="wand"]': 'wand', '#wDel': 'trash', '[data-tool="tuer"]': 'tuer', '[data-tool="fenster"]': 'fenster', '[data-tool="scale"]': 'scale', '#fitBtn': 'fit',
     '[data-cam="orbit"]': 'cube', '[data-cam="top"]': 'top', '[data-cam="walk"]': 'eye', '#snapBtn': 'magnet', '#shotBtn': 'camera',
-    '#undoBtn': 'undo', '#shareBtn': 'link', '#clearItems': 'trash', '#expBtn': 'exp', 'label[for="impFile"]': 'imp', '#view2d': 'plan', '#view3d': 'cube',
+    '#undoBtn': 'undo', '#shareBtn': 'link', '#clearItems': 'trash', '#clearRooms': 'trash', '#expBtn': 'exp', 'label[for="impFile"]': 'imp', '#view2d': 'plan', '#view3d': 'cube',
     '#rotL': 'rotL', '#rotR': 'rotR', '#rot90': 'rotR', '#fDup': 'dup', '#fDel': 'trash', '#oDel': 'trash', '#planRemove': 'trash' };
   for (const k in IC) decorate(k, IC[k]);
   /* Maße mit der Maus: Minus- und Plus-Taste an jedem Maßfeld. Ein Klick ändert 1 cm, gedrückt halten läuft weiter und wird schneller. */
@@ -1807,6 +1807,13 @@ function decorate(sel, name) {
       if (!loaded || !S.items.length) return;
       if (cb.dataset.arm) { const n = S.items.length; disarm(); change(() => { S.items = []; if (sel && sel.type === 'item') sel = null; }); toast(n + ' Möbel entfernt. „Rückgängig“ stellt sie wieder her.'); }
       else { cb.dataset.arm = '1'; lb().textContent = 'Wirklich alle ' + S.items.length + ' entfernen?'; armT = setTimeout(disarm, 4000); }
+    });
+  }
+  { let armT = 0; const cb = $('#clearRooms'), lb = () => cb.querySelector('.lb') || cb, disarm = () => { clearTimeout(armT); delete cb.dataset.arm; lb().textContent = 'Alle entfernen'; };
+    cb.addEventListener('click', () => {
+      const n = S.rooms.length + S.walls.length; if (!loaded || !n) return;
+      if (cb.dataset.arm) { disarm(); change(() => { S.rooms = []; S.walls = []; S.openings = []; S.example = false; sel = null; drawPts = null; }); toast('Räume, Wände, Türen und Fenster entfernt. „Rückgängig“ stellt sie wieder her.'); }
+      else { cb.dataset.arm = '1'; lb().textContent = 'Wirklich alle ' + n + ' entfernen?'; armT = setTimeout(disarm, 4000); }
     });
   }
   $('#fAdd').addEventListener('click', addDraft);
