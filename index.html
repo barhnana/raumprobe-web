@@ -48,7 +48,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 .bar-r{margin-left:auto;display:flex;align-items:center;flex-wrap:wrap;gap:8px}
 .save{font:400 12px var(--f-mono);color:var(--ink-2);display:flex;align-items:center;gap:6px}
 .save::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--ok)}
-.save[data-s="saving"]::before{background:var(--accent)}
+.save[data-s="saving"]::before,.save[data-s="shared"]::before{background:var(--accent)}
 .save[data-s="local"]::before,.save[data-s="readonly"]::before,.save[data-s="unreachable"]::before,.save[data-s="error"]::before{background:var(--danger)}
 
 .btn,.tb{border:1px solid var(--line);background:var(--raised);border-radius:var(--r);padding:6px 11px;font:600 13px var(--f-display);letter-spacing:.02em;cursor:pointer;color:var(--ink);text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:6px}
@@ -159,6 +159,7 @@ a.plink{font-size:13px;color:var(--blue);overflow-wrap:anywhere}
       <button type="button" class="btn" id="expBtn" title="Ganzen Stand mit Grundriss und Möbeln als Datei sichern">Exportieren</button>
       <label class="btn" for="impFile" title="Projektdatei laden – ersetzt den aktuellen Stand">Importieren</label>
       <input class="vh" type="file" id="impFile" accept=".json,application/json">
+      <button type="button" class="btn" id="shareBtn" hidden title="Link erzeugen, der dieses Design enthält">Link teilen</button>
     </div>
   </header>
 
@@ -196,6 +197,14 @@ a.plink{font-size:13px;color:var(--blue);overflow-wrap:anywhere}
         </div>
       </div>
       <div class="cover" id="msg3d" hidden><div class="card"><p id="msg3dText"></p></div></div>
+      <div class="cover" id="shareBox" hidden style="z-index:4">
+        <div class="card" style="max-width:460px;align-items:stretch;text-align:left">
+          <h3>Link zu deinem Design</h3>
+          <p>Wer den Link öffnet, sieht Räume, Wände und Möbel als eigene Kopie. Grundrissbild, Produktbilder und Oberflächen aus Fotos sind nicht enthalten. Spätere Änderungen kommen nicht mit.</p>
+          <input class="inp" id="shareUrl" readonly aria-label="Link zum Design">
+          <div class="row"><button type="button" class="btn primary" id="shareCopy">Link kopieren</button><button type="button" class="btn" id="shareClose">Schließen</button><span class="muted tiny" id="shareInfo" role="status"></span></div>
+        </div>
+      </div>
       <div class="cover" id="reading" hidden>
         <div class="card">
           <h3>Räume werden aus dem Grundriss gelesen</h3>
@@ -214,6 +223,10 @@ a.plink{font-size:13px;color:var(--blue);overflow-wrap:anywhere}
       </div>
       <div class="panes">
         <div id="paneRaum" role="tabpanel" aria-labelledby="tabRaum">
+          <div class="note" id="shareNote" hidden>
+            <span>Du siehst ein <strong>geteiltes Design</strong>. Dein eigenes gespeichertes Projekt bleibt unberührt, bis du das geteilte übernimmst.</span>
+            <div class="row"><button type="button" class="btn small primary" id="shareAdopt">Als mein Projekt übernehmen</button><button type="button" class="btn small" id="shareMine">Mein Projekt öffnen</button></div>
+          </div>
           <div class="note" id="exNote" hidden>
             <span>Das ist ein <strong>Beispielraum</strong> mit erfundenen Möbeln. Lade deinen Grundriss hoch oder beginne leer.</span>
             <button type="button" class="btn small" id="clearEx">Leeren und neu beginnen</button>
@@ -578,6 +591,8 @@ const V = { s: 60, ox: 40, oy: 40 };
 let C = {};
 const cap = { sampleImages: false, downloads: null }, capP = {};
 const CLIENT = uid();
+const LOCAL = !window.claude;
+let localOK = false, shareMode = false, localSaved = null;
 let docRef = null, saveT = 0, writing = false, again = false, lastRev = 0, readOnly = false;
 let draft = newDraft(), draftLocal = null, busy = false;
 let pdfDoc = null, pdfFile = '', pdfPxPerPt = 0;
@@ -589,7 +604,7 @@ function readColors() { const cs = getComputedStyle(document.documentElement), g
 
 let toastT = 0;
 function toast(msg) { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, 4200); }
-function setSave(s) { const e = $('#saveState'); e.dataset.s = s; e.textContent = { saved: 'Gespeichert', saving: 'Speichert …', local: 'Wird hier nicht gespeichert', readonly: 'Nur Ansicht', unreachable: 'Speicher nicht erreichbar', error: 'Speichern fehlgeschlagen' }[s] || s; }
+function setSave(s) { const e = $('#saveState'); e.dataset.s = s; e.textContent = { saved: 'Gespeichert', savedLocal: 'In diesem Browser gespeichert', shared: 'Geteiltes Design, nicht gespeichert', saving: 'Speichert …', local: 'Wird hier nicht gespeichert', readonly: 'Nur Ansicht', unreachable: 'Speicher nicht erreichbar', error: 'Speichern fehlgeschlagen' }[s] || s; }
 
 /* ---------- Änderungen, Rückgängig, Speichern ---------- */
 function beginChange() { undo.push(JSON.stringify(S)); if (undo.length > 60) undo.shift(); }
@@ -597,7 +612,8 @@ function endChange() { touch(); refresh(); }
 function change(fn) { if (!loaded) return; beginChange(); fn(); endChange(); }
 function touch() {
   $('#undoBtn').disabled = !undo.length;
-  if (!docRef || readOnly) return;
+  if (!docRef) { if (LOCAL && localOK && !shareMode) { setSave('saving'); clearTimeout(saveT); saveT = setTimeout(flushLocal, 1200); } return; }
+  if (readOnly) return;
   dirty = true; setSave('saving'); clearTimeout(saveT); saveT = setTimeout(flush, 900);
 }
 async function flush() {
@@ -621,7 +637,7 @@ async function flush() {
 function undoLast() { const s = undo.pop(); if (!s) return; S = cleanState(JSON.parse(s)); sel = null; drawPts = null; syncPlanImage(); touch(); refresh(); }
 
 function startStore(db) {
-  if (!db) { loaded = true; setSave('local'); firstShow(); return; }
+  if (!db) { if (LOCAL) startLocal(); else { loaded = true; setSave('local'); firstShow(); } return; }
   docRef = db.doc('projects/main');
   const timer = setTimeout(() => { if (!loaded) { $('#loading').textContent = 'Die gespeicherten Daten sind noch nicht erreichbar. Die Seite versucht es weiter.'; setSave('unreachable'); } }, 10000);
   docRef.onSnapshot(snap => {
@@ -1291,7 +1307,7 @@ function showTab(t) { const r = t === 'raum'; $('#tabRaum').setAttribute('aria-s
 function refresh() { renderPanel(); hint(); $('#empty').hidden = !(loaded && !view3 && !S.plan && !S.rooms.length); if (view3) rebuild3D(); else draw2D(); }
 function setVal(id, v) { const e = $(id); if (document.activeElement !== e) e.value = v; }
 function renderPanel() {
-  setVal('#projName', S.name); $('#undoBtn').disabled = !undo.length; $('#exNote').hidden = !S.example;
+  setVal('#projName', S.name); $('#undoBtn').disabled = !undo.length; $('#exNote').hidden = !S.example; $('#shareNote').hidden = !shareMode; $('#shareBtn').hidden = !LOCAL;
   const P = S.plan;
   $('#planInfo').hidden = !P; $('#planInfo').style.display = P ? 'flex' : 'none';
   if (P) { $('#planName').textContent = (P.name || 'Grundriss') + ' · ' + de(P.w / P.pxPerM, 1) + ' × ' + de(P.h / P.pxPerM, 1) + ' m'; setVal('#planOpacity', P.opacity); $('#planFloor').checked = P.floor3d; }
@@ -1480,7 +1496,7 @@ async function productImage(file) {
   let cv; try { cv = await fileToCanvas(file); } catch (e) { toast('Dieses Bild konnte nicht gelesen werden.'); return; }
   const k = Math.min(1, 640 / Math.max(cv.width, cv.height)), th = document.createElement('canvas'); th.width = Math.round(cv.width * k); th.height = Math.round(cv.height * k); th.getContext('2d').drawImage(cv, 0, 0, th.width, th.height);
   const blob = await toBlob(th, 'image/jpeg', 0.84), local = URL.createObjectURL(blob), it = cur();
-  if (it) { localImgs[it.id] = local; refresh(); } else { draft.blob = blob; draftLocal = local; draft.img = null; syncForm(); }
+  if (it) { localImgs[it.id] = local; refresh(); touch(); } else { draft.blob = blob; draftLocal = local; draft.img = null; syncForm(); }
   const assets = await capP.assets; if (!assets) return;
   try { const r = await assets.upload(blob, { type: 'image/jpeg' }); if (it && S.items.includes(it)) change(() => { it.img = r.id; }); else if (!it && draft.blob === blob) draft.img = r.id; }
   catch (e) { toast('Das Produktbild bleibt nur bis zum Neuladen sichtbar.'); }
@@ -1513,7 +1529,7 @@ async function autoTrace() {
   const P = S.plan; if (!P || !planImg || busy || !loaded) return;
   const key = P.key, st = $('#autoState'), say = (t, err) => { st.hidden = false; st.textContent = t; st.classList.toggle('err', !!err); toast(t); };
   const sample = await capP.sample, canSee = await capP.images;
-  if (!sample || !canSee) { say('Grundriss geladen. Das automatische Auslesen ist in dieser Ansicht nicht verfügbar. Öffne die Seite in Claude oder zeichne die Räume mit „Raum zeichnen“ nach.', true); return; }
+  if (!sample || !canSee) { say(LOCAL ? 'Grundriss geladen. Zeichne die Räume jetzt mit „Raum zeichnen“ nach und lege den Maßstab fest.' : 'Grundriss geladen. Das automatische Auslesen ist in dieser Ansicht nicht verfügbar. Öffne die Seite in Claude oder zeichne die Räume mit „Raum zeichnen“ nach.', !LOCAL); return; }
   if (busy || !S.plan || S.plan.key !== key) return;
   busy = true; $('#autoBtn').disabled = true; $('#reading').hidden = false; st.hidden = true; traceCtl = new AbortController();
   try {
@@ -1551,12 +1567,18 @@ async function autoTrace() {
 /* ---------- Projektdatei: ganzer Stand als eine JSON-Datei ---------- */
 const loadImg = src => new Promise(res => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = src; });
 async function imgToDataUrl(src, max) { const i = await loadImg(src); if (!i || !i.naturalWidth) return null; try { return canvasFromImage(i, i.naturalWidth, i.naturalHeight, max).toDataURL('image/jpeg', 0.86); } catch (e) { return null; } }
+const dataCache = {};
+async function buildExport() {
+  const out = { format: 'raumprobe-projekt', version: 1, exportedAt: new Date().toISOString(), project: JSON.parse(JSON.stringify(S)), planImage: null, itemImages: {} };
+  if (S.plan && planImg) { const k = 'plan:' + S.plan.key; if (!dataCache[k]) { try { dataCache[k] = canvasFromImage(planImg, S.plan.w, S.plan.h, 4000).toDataURL('image/jpeg', 0.88); } catch (e) {} } out.planImage = dataCache[k] || null; }
+  const grab = async (k, u, max) => { if (!u || k in out.itemImages) return; if (!dataCache[u]) dataCache[u] = /^data:image\//.test(u) ? u : await imgToDataUrl(u, max); if (dataCache[u]) out.itemImages[k] = dataCache[u]; };
+  for (const it of S.items) await grab(it.img || it.id, imgUrl(it), 640);
+  for (const id of new Set(S.items.map(i => i.tex).concat(S.rooms.map(r => r.floorTex)).filter(Boolean))) await grab(id, texLocal[id] || '/_blob/' + id, 256);
+  return out;
+}
 async function exportProject() {
   if (!loaded) return;
-  const out = { format: 'raumprobe-projekt', version: 1, exportedAt: new Date().toISOString(), project: JSON.parse(JSON.stringify(S)), planImage: null, itemImages: {} };
-  if (S.plan && planImg) { try { out.planImage = canvasFromImage(planImg, S.plan.w, S.plan.h, 4000).toDataURL('image/jpeg', 0.88); } catch (e) {} }
-  for (const it of S.items) { const u = imgUrl(it), k = it.img || it.id; if (u && !(k in out.itemImages)) { const d = /^data:image\//.test(u) ? u : await imgToDataUrl(u, 640); if (d) out.itemImages[k] = d; } }
-  for (const id of new Set(S.items.map(i => i.tex).concat(S.rooms.map(r => r.floorTex)).filter(Boolean))) { if (!(id in out.itemImages)) { const d = await imgToDataUrl(texLocal[id] || '/_blob/' + id, 256); if (d) out.itemImages[id] = d; } }
+  const out = await buildExport();
   const n = new Date(), p2 = v => String(v).padStart(2, '0'), stamp = n.getFullYear() + '-' + p2(n.getMonth() + 1) + '-' + p2(n.getDate()) + '_' + p2(n.getHours()) + p2(n.getMinutes());
   const name = ((S.name || '').replace(/[^\wäöüÄÖÜß -]+/g, '').trim().replace(/\s+/g, '-').slice(0, 50) || 'Raumprobe') + '_' + stamp + '.json';
   const blob = new Blob([JSON.stringify(out, null, 1)], { type: 'application/json' });
@@ -1565,27 +1587,72 @@ async function exportProject() {
     catch (e) { if (!e || e.code !== 'declined') toast(e && e.code === 'rate_limited' ? 'Es ist noch ein Speichern-Dialog offen.' : 'Die Projektdatei lässt sich in dieser Ansicht nicht speichern.'); }
     return;
   }
-  if (window.claude) { toast('Die Projektdatei lässt sich in dieser Ansicht nicht speichern.'); return; }
+  if (!LOCAL) { toast('Die Projektdatei lässt sich in dieser Ansicht nicht speichern.'); return; }
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove();
 }
-async function importProject(file) {
-  if (!file || !loaded) return;
-  let j = null; try { j = JSON.parse(await file.text()); } catch (e) {}
-  if (!j || j.format !== 'raumprobe-projekt' || !j.project || typeof j.project !== 'object') { toast('Diese Datei ist keine Raumprobe-Projektdatei.'); return; }
+/* Setzt einen Stand aus einer Projektdatei oder dem Browser-Speicher ein. Liefert das Grundrissbild, falls eines dabei war. */
+async function loadProject(j) {
   const next = cleanState(j.project); let cv = null;
   if (next.plan) {
     next.plan.key = uid();
     if (typeof j.planImage === 'string' && /^data:image\/(jpeg|png);base64,/.test(j.planImage)) { const i = await loadImg(j.planImage); if (i && i.naturalWidth) cv = canvasFromImage(i, i.naturalWidth, i.naturalHeight, 4000); }
     if (cv) planCache[next.plan.key] = cv;
-    if (next.plan.assetId && !(await loadImg('/_blob/' + next.plan.assetId))) next.plan.assetId = null;
+    if (next.plan.assetId && (LOCAL || !(await loadImg('/_blob/' + next.plan.assetId)))) next.plan.assetId = null;
   }
-  beginChange(); S = next; sel = null; drawPts = null; cal = null;
+  S = next; sel = null; drawPts = null; cal = null;
   const imgs = j.itemImages && typeof j.itemImages === 'object' ? j.itemImages : {};
   for (const k in imgs) if (typeof imgs[k] === 'string' && /^data:image\/(jpeg|png);base64,/.test(imgs[k])) texLocal[k] = imgs[k];
   for (const it of S.items) { const d = imgs[it.img] || imgs[it.id]; if (typeof d === 'string' && /^data:image\/(jpeg|png);base64,/.test(d)) localImgs[it.id] = d; }
-  planKey = null; syncPlanImage(); endChange(); fitView(); if (T.ok) fitCam3D(); refresh();
+  planKey = null; syncPlanImage();
+  return cv;
+}
+async function importProject(file) {
+  if (!file || !loaded) return;
+  let j = null; try { j = JSON.parse(await file.text()); } catch (e) {}
+  if (!j || j.format !== 'raumprobe-projekt' || !j.project || typeof j.project !== 'object') { toast('Diese Datei ist keine Raumprobe-Projektdatei.'); return; }
+  beginChange(); const cv = await loadProject(j); endChange(); fitView(); if (T.ok) fitCam3D(); refresh();
   toast('Projekt geladen. „Rückgängig“ stellt den vorherigen Stand wieder her.');
   if (cv && S.plan && !S.plan.assetId) { const key = S.plan.key, assets = await capP.assets; if (!assets) return; try { const r = await assets.upload(await toBlob(cv, 'image/jpeg', 0.88), { type: 'image/jpeg' }); if (S.plan && S.plan.key === key) { S.plan.assetId = r.id; touch(); } } catch (e) { toast('Das Grundrissbild bleibt nur bis zum Neuladen sichtbar.'); } }
+}
+/* ---------- Öffentliche Fassung ohne Claude: Speichern im Browser und Teilen per Link ---------- */
+function idb() { return new Promise((res, rej) => { const r = indexedDB.open('raumprobe', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); }
+async function idbGet(k) { const db = await idb(); return new Promise((res, rej) => { const q = db.transaction('kv').objectStore('kv').get(k); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); }
+async function idbSet(k, v) { const db = await idb(); return new Promise((res, rej) => { const t = db.transaction('kv', 'readwrite'); t.objectStore('kv').put(v, k); t.oncomplete = () => res(); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error); }); }
+let localBusy = false, localAgain = false;
+async function flushLocal() {
+  if (localBusy) { localAgain = true; return; }
+  localBusy = true;
+  try { await idbSet('project', await buildExport()); if (!localAgain) setSave('savedLocal'); }
+  catch (e) { setSave('error'); toast('Speichern im Browser hat nicht geklappt. Sichere deinen Stand mit „Exportieren“.'); }
+  localBusy = false; if (localAgain) { localAgain = false; flushLocal(); }
+}
+const clearHash = () => { try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {} };
+const b64u = {
+  enc: b => { let t = ''; for (let i = 0; i < b.length; i += 0x8000) t += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000)); return btoa(t).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); },
+  dec: t => { const r = atob(t.replace(/-/g, '+').replace(/_/g, '/')), b = new Uint8Array(r.length); for (let i = 0; i < r.length; i++) b[i] = r.charCodeAt(i); return b; }
+};
+async function pipe(bytes, stream) { return new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer()); }
+async function shareLink() {
+  const p = JSON.parse(JSON.stringify(S)), r3 = v => Math.round(v * 1000) / 1000; p.plan = null; delete p.example;
+  for (const r of p.rooms) { delete r.id; delete r.floorTex; r.pts = r.pts.map(q => [r3(q[0]), r3(q[1])]); }
+  for (const w of p.walls) { delete w.id; w.a = w.a.map(r3); w.b = w.b.map(r3); }
+  for (const o of p.openings) { delete o.id; o.x = r3(o.x); o.y = r3(o.y); }
+  for (const it of p.items) { delete it.id; delete it.img; delete it.tex; it.x = r3(it.x); it.y = r3(it.y); for (const k of ['url', 'price', 'ow', 'bd', 'elev']) if (!it[k]) delete it[k]; }
+  const raw = new TextEncoder().encode(JSON.stringify(p)); let code;
+  try { code = 'p1.' + b64u.enc(await pipe(raw, new CompressionStream('deflate-raw'))); } catch (e) { code = 'p0.' + b64u.enc(raw); }
+  return location.href.split('#')[0] + '#' + code;
+}
+async function readShare() {
+  const m = /^#p([01])\.([A-Za-z0-9_-]+)$/.exec(location.hash); if (!m) return null;
+  try { let b = b64u.dec(m[2]); if (m[1] === '1') b = await pipe(b, new DecompressionStream('deflate-raw')); return cleanState(JSON.parse(new TextDecoder().decode(b))); } catch (e) { return null; }
+}
+async function startLocal() {
+  let j = null; try { j = await idbGet('project'); localOK = true; } catch (e) {}
+  const shared = await readShare(); let adopt = false;
+  if (/^#p[01]\./.test(location.hash) && !shared) toast('Dieser Link enthält kein lesbares Design.');
+  if (shared) { S = shared; syncPlanImage(); if (j && j.project && ((j.project.rooms || []).length || (j.project.items || []).length || j.project.plan)) { shareMode = true; localSaved = j; } else { clearHash(); adopt = true; } }
+  else if (j && j.project) { try { await loadProject(j); } catch (e) {} }
+  loaded = true; setSave(shareMode ? 'shared' : localOK ? 'savedLocal' : 'local'); firstShow(); if (adopt) touch();
 }
 async function saveShot() {
   if (!cap.downloads) return;
@@ -1617,6 +1684,7 @@ const ICONS = {
   rotL: '<path d="M4 4v5h5M4.6 9a8 8 0 1 1 .9 8"/>',
   rotR: '<path d="M20 4v5h-5M19.4 9a8 8 0 1 0-.9 8"/>',
   dup: '<path d="M9 9h11v11H9zM5 15V4h11"/>',
+  link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
   wand: '<path d="M5.5 17.5l13-11"/><circle cx="5" cy="18" r="1.8"/><circle cx="19" cy="6" r="1.8"/>',
   trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/>'
 };
@@ -1629,7 +1697,7 @@ function decorate(sel, name) {
 (function wire() {
   const IC = { '[data-tool="select"]': 'select', '[data-tool="draw"]': 'draw', '[data-tool="wand"]': 'wand', '#wDel': 'trash', '[data-tool="tuer"]': 'tuer', '[data-tool="fenster"]': 'fenster', '[data-tool="scale"]': 'scale', '#fitBtn': 'fit',
     '[data-cam="orbit"]': 'cube', '[data-cam="top"]': 'top', '[data-cam="walk"]': 'eye', '#snapBtn': 'magnet', '#shotBtn': 'camera',
-    '#undoBtn': 'undo', '#expBtn': 'exp', 'label[for="impFile"]': 'imp', '#view2d': 'plan', '#view3d': 'cube',
+    '#undoBtn': 'undo', '#shareBtn': 'link', '#expBtn': 'exp', 'label[for="impFile"]': 'imp', '#view2d': 'plan', '#view3d': 'cube',
     '#rotL': 'rotL', '#rotR': 'rotR', '#rot90': 'rotR', '#fDup': 'dup', '#fDel': 'trash', '#oDel': 'trash', '#planRemove': 'trash' };
   for (const k in IC) decorate(k, IC[k]);
   const sel$ = $('#fCat'); for (const k in CATS) { const o = el('option', '', CATS[k][0]); o.value = k; sel$.appendChild(o); }
@@ -1676,6 +1744,12 @@ function decorate(sel, name) {
   $('#wDel').addEventListener('click', deleteSel);
   $('#wallBtn').addEventListener('click', () => { setView(false); setTool('wand'); });
   $('#expBtn').addEventListener('click', exportProject);
+  $('#shareBtn').addEventListener('click', async () => { if (!loaded) return; const u = await shareLink(); $('#shareUrl').value = u; $('#shareInfo').textContent = u.length > 8000 ? 'Der Link ist sehr lang (' + u.length + ' Zeichen). Manche Messenger kürzen ihn; nutze dann „Exportieren“.' : ''; $('#shareBox').hidden = false; $('#shareUrl').select(); });
+  $('#shareCopy').addEventListener('click', () => { const i = $('#shareUrl'); i.select(); const ok = () => { $('#shareInfo').textContent = 'Kopiert.'; }; try { navigator.clipboard.writeText(i.value).then(ok, () => { $('#shareInfo').textContent = 'Markiert – kopiere mit Strg+C.'; }); } catch (e) { $('#shareInfo').textContent = 'Markiert – kopiere mit Strg+C.'; } });
+  $('#shareClose').addEventListener('click', () => { $('#shareBox').hidden = true; });
+  $('#shareAdopt').addEventListener('click', () => { shareMode = false; localSaved = null; clearHash(); touch(); renderPanel(); });
+  $('#shareMine').addEventListener('click', async () => { const j = localSaved; shareMode = false; localSaved = null; clearHash(); undo = []; if (j) await loadProject(j); setSave('savedLocal'); fitView(); if (T.ok) fitCam3D(); setView(S.rooms.length > 0); });
+  window.addEventListener('hashchange', () => { if (LOCAL && /^#p[01]\./.test(location.hash)) location.reload(); });
   $('#impFile').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; importProject(f); });
   $('#pRead').addEventListener('click', readProduct); $('#pUrl').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); readProduct(); } });
   $('#pParse').addEventListener('click', parsePasted);
@@ -1717,6 +1791,7 @@ function decorate(sel, name) {
 function updateCaps() { $('#shotBtn').hidden = !cap.downloads; if (loaded) renderPanel(); }
 (function boot() {
   readColors(); renderPanel(); hint(); draw2D();
+  if (LOCAL) { const d = $('#drop span'), e = $('#empty p'); if (d) d.textContent = 'Bild oder PDF hierher ziehen, einfügen oder auswählen und die Räume darüber nachzeichnen.'; if (e) e.textContent = 'Lade ein Bild oder PDF hoch und zeichne die Räume darüber nach. Ohne Grundriss legst du einen rechteckigen Raum mit seinen Maßen an.'; }
   const use = n => { try { return window.claude && typeof window.claude.use === 'function' ? window.claude.use(n).catch(() => null) : Promise.resolve(null); } catch (e) { return Promise.resolve(null); } };
   capP.assets = use('assets'); capP.sample = use('sample'); capP.mcp = use('mcp');
   capP.images = capP.sample.then(async s => { cap.sample = s; if (!s) return false; try { const l = await s.limits(); return !!(l && l.images); } catch (e) { return false; } });

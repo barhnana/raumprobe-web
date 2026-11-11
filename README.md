@@ -6,8 +6,6 @@ Grundriss hochladen, Räume zeichnen und Möbel maßstabsgetreu in 3D im Raum pl
 
 **https://barhnana.github.io/raumprobe-web/**
 
-(aktiv nach einmaliger Aktivierung von GitHub Pages, siehe unten)
-
 ## Funktionen
 
 - Grundriss als Bild oder PDF hochladen (TIFF und HEIC werden ebenfalls unterstützt)
@@ -15,7 +13,10 @@ Grundriss hochladen, Räume zeichnen und Möbel maßstabsgetreu in 3D im Raum pl
 - Räume, einzelne Wände, Türen und Fenster zeichnen
 - Möbel anlegen mit Maßen, Farbe, Höhe und Rotation, inklusive eigenem Produktbild
 - 2D-Grundriss und 3D-Ansicht des eingerichteten Raums
+- Automatisches Speichern im Browser, ohne Konto
+- Design per Link teilen, ohne Dateien zu verschicken
 - Projekt als JSON-Datei exportieren und wieder importieren
+- Oberflächen aus Fotos: Farbe und Struktur für Möbel und Böden
 - Helle und dunkle Oberfläche
 
 ## Nutzung
@@ -25,7 +26,11 @@ Grundriss hochladen, Räume zeichnen und Möbel maßstabsgetreu in 3D im Raum pl
 3. Räume zeichnen oder Wände setzen, Türen und Fenster einfügen.
 4. Möbel anlegen, in 2D platzieren, in 3D prüfen.
 
-Der aktuelle Stand wird im Browser nicht dauerhaft gespeichert. Über **Exportieren** lässt sich das Projekt jederzeit als Datei sichern und mit **Importieren** wiederherstellen.
+## Speichern und Teilen
+
+- **Speichern:** Jede Änderung wird automatisch in diesem Browser auf diesem Gerät gespeichert, samt Grundrissbild und Produktbildern. Wer die Browserdaten löscht oder ein privates Fenster nutzt, verliert den Stand.
+- **Sichern:** **Exportieren** schreibt das ganze Projekt in eine Datei, **Importieren** lädt sie wieder, auch auf einem anderen Gerät.
+- **Teilen:** **Link teilen** erzeugt einen Link, der Räume, Wände, Türen, Fenster und Möbel enthält. Wer ihn öffnet, bekommt eine eigene Kopie. Bilder sind nicht enthalten, spätere Änderungen kommen nicht mit. Die Daten stehen in der Adresse selbst und werden nirgends hochgeladen.
 
 ## Selbst hosten
 
